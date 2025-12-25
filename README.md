@@ -1,110 +1,183 @@
-# FHEVM Hardhat Template
+# PrivatePulse
 
-A Hardhat-based template for developing Fully Homomorphic Encryption (FHE) enabled Solidity smart contracts using the
-FHEVM protocol by Zama.
+PrivatePulse is a private messaging dapp that uses Fully Homomorphic Encryption (FHE) to protect the message key on-chain.
+Each message is encrypted client-side with a freshly generated six-digit key, while the key itself is encrypted using Zama
+FHE and stored on-chain. Recipients decrypt the key via the FHE relayer and then unlock the message locally.
 
-## Quick Start
+## What it does
 
-For detailed instructions see:
-[FHEVM Hardhat Quick Start Tutorial](https://docs.zama.ai/protocol/solidity-guides/getting-started/quick-start-tutorial)
+- Generates a random six-digit key A for every message.
+- Encrypts the message body in the browser using key A.
+- Encrypts key A with Zama FHE and stores it on-chain alongside the ciphertext.
+- Grants decryption access to sender and recipient through FHE ACL.
+- Lets the recipient decrypt key A and recover the message locally.
+
+## The problem it solves
+
+Traditional on-chain messaging exposes either plaintext content or plaintext encryption keys. PrivatePulse keeps both
+pieces separated: the message is only stored as ciphertext, and the key is never stored in plaintext. This reduces the
+risk of on-chain leaks while keeping the system verifiable and composable on a public chain.
+
+## Key advantages
+
+- On-chain privacy for message keys using FHE.
+- Off-chain encryption keeps message content private from the chain and indexers.
+- Minimal on-chain footprint: only ciphertext and metadata are stored.
+- Simple, repeatable flow: new key per message with explicit recipient access.
+- Works with standard wallets and Sepolia without any custom node requirements for users.
+
+## End-to-end flow
+
+1. Sender types a message in the frontend.
+2. The frontend generates a six-digit key A.
+3. The message is encrypted locally with key A and converted to a base64 ciphertext string.
+4. The frontend asks the Zama relayer to encrypt key A into an FHE ciphertext (euint32 handle).
+5. The contract stores the encrypted message body and the encrypted key.
+6. The recipient requests decryption of key A through the relayer.
+7. The recipient decrypts the message locally using the recovered key.
+
+## Architecture overview
+
+### Smart contract
+
+- `contracts/PrivatePulse.sol` stores encrypted messages and encrypted keys.
+- Each message includes sender, recipient, timestamp, encrypted body, and FHE encrypted key.
+- Access control (FHE ACL) is granted to the sender and recipient for the encrypted key.
+
+### Frontend
+
+- React + Vite UI with RainbowKit wallet connection.
+- Uses `viem` for reads and `ethers` for writes.
+- Encryption and decryption happen in the browser.
+- No local storage and no frontend environment variables; configuration is committed in TypeScript.
+
+### Zama relayer
+
+- Relayer service encrypts numeric key input for on-chain storage.
+- Relayer also decrypts the FHE key for recipients with permission.
+- The relayer is required for any encryption or decryption of the FHE key.
+
+## Data model
+
+Each stored message is:
+
+- `sender`: message sender address.
+- `recipient`: message recipient address.
+- `timestamp`: block timestamp of message creation.
+- `encryptedBody`: base64 string produced by the local cipher.
+- `encryptedKey`: FHE-encrypted euint32 handle.
+
+## Technology stack
+
+- Solidity + Hardhat + hardhat-deploy
+- Zama FHEVM (`@fhevm/solidity`) and relayer SDK (`@zama-fhe/relayer-sdk`)
+- React + Vite
+- RainbowKit + Wagmi
+- `viem` for contract reads, `ethers` for contract writes
+- TypeScript
+
+## Getting started
 
 ### Prerequisites
 
-- **Node.js**: Version 20 or higher
-- **npm or yarn/pnpm**: Package manager
+- Node.js 20+
+- npm
+- A wallet funded with Sepolia ETH for deployment and use
 
-### Installation
+### Install dependencies
 
-1. **Install dependencies**
-
-   ```bash
-   npm install
-   ```
-
-2. **Set up environment variables**
-
-   ```bash
-   npx hardhat vars set MNEMONIC
-
-   # Set your Infura API key for network access
-   npx hardhat vars set INFURA_API_KEY
-
-   # Optional: Set Etherscan API key for contract verification
-   npx hardhat vars set ETHERSCAN_API_KEY
-   ```
-
-3. **Compile and test**
-
-   ```bash
-   npm run compile
-   npm run test
-   ```
-
-4. **Deploy to local network**
-
-   ```bash
-   # Start a local FHEVM-ready node
-   npx hardhat node
-   # Deploy to local network
-   npx hardhat deploy --network localhost
-   ```
-
-5. **Deploy to Sepolia Testnet**
-
-   ```bash
-   # Deploy to Sepolia
-   npx hardhat deploy --network sepolia
-   # Verify contract on Etherscan
-   npx hardhat verify --network sepolia <CONTRACT_ADDRESS>
-   ```
-
-6. **Test on Sepolia Testnet**
-
-   ```bash
-   # Once deployed, you can run a simple test on Sepolia.
-   npx hardhat test --network sepolia
-   ```
-
-## 📁 Project Structure
-
-```
-fhevm-hardhat-template/
-├── contracts/           # Smart contract source files
-│   └── FHECounter.sol   # Example FHE counter contract
-├── deploy/              # Deployment scripts
-├── tasks/               # Hardhat custom tasks
-├── test/                # Test files
-├── hardhat.config.ts    # Hardhat configuration
-└── package.json         # Dependencies and scripts
+```bash
+npm install
+cd frontend
+npm install
 ```
 
-## 📜 Available Scripts
+### Configure environment
 
-| Script             | Description              |
-| ------------------ | ------------------------ |
-| `npm run compile`  | Compile all contracts    |
-| `npm run test`     | Run all tests            |
-| `npm run coverage` | Generate coverage report |
-| `npm run lint`     | Run linting checks       |
-| `npm run clean`    | Clean build artifacts    |
+Create a `.env` file in the repo root:
 
-## 📚 Documentation
+```bash
+INFURA_API_KEY=your_infura_key
+PRIVATE_KEY=your_private_key
+ETHERSCAN_API_KEY=optional_for_verification
+```
 
-- [FHEVM Documentation](https://docs.zama.ai/fhevm)
-- [FHEVM Hardhat Setup Guide](https://docs.zama.ai/protocol/solidity-guides/getting-started/setup)
-- [FHEVM Testing Guide](https://docs.zama.ai/protocol/solidity-guides/development-guide/hardhat/write_test)
-- [FHEVM Hardhat Plugin](https://docs.zama.ai/protocol/solidity-guides/development-guide/hardhat)
+Notes:
 
-## 📄 License
+- Deployment uses a private key only. Do not use a mnemonic.
+- Frontend configuration does not use environment variables.
 
-This project is licensed under the BSD-3-Clause-Clear License. See the [LICENSE](LICENSE) file for details.
+### Compile and test
 
-## 🆘 Support
+```bash
+npm run compile
+npm run test
+```
 
-- **GitHub Issues**: [Report bugs or request features](https://github.com/zama-ai/fhevm/issues)
-- **Documentation**: [FHEVM Docs](https://docs.zama.ai)
-- **Community**: [Zama Discord](https://discord.gg/zama)
+### Deploy locally (optional)
 
----
+```bash
+npm run chain
+npm run deploy:localhost
+```
 
-**Built with ❤️ by the Zama team**
+The frontend is configured for Sepolia and should not connect to localhost.
+
+### Deploy to Sepolia
+
+```bash
+npm run deploy:sepolia
+```
+
+To verify:
+
+```bash
+npm run verify:sepolia -- <CONTRACT_ADDRESS>
+```
+
+### Update frontend contract config
+
+After deployment, update:
+
+- `frontend/src/config/contracts.ts` with the deployed address.
+- `frontend/src/config/contracts.ts` with the ABI copied from `deployments/sepolia/PrivatePulse.json`.
+
+Do not import JSON in the frontend; copy the ABI into the TypeScript file.
+
+### Run the frontend
+
+```bash
+cd frontend
+npm run dev
+```
+
+## Security and privacy notes
+
+- The current message cipher is a simple XOR with a six-digit key and is not suitable for production use.
+- The six-digit key has limited entropy; treat this as a demo security model.
+- Sender and recipient addresses are public on-chain.
+- The contract and frontend are not audited.
+
+## Project structure
+
+```
+contracts/    Solidity contracts
+deploy/       Deployment scripts
+tasks/        Hardhat tasks
+test/         Contract tests
+frontend/     React app (no Tailwind)
+docs/         Zama and relayer references
+```
+
+## Future roadmap
+
+- Replace the demo cipher with authenticated encryption (AES-GCM or XChaCha20-Poly1305).
+- Support attachments with client-side chunking and encryption.
+- Add message threading and pagination based on indexed events.
+- Improve key management for multi-recipient messages.
+- Add optional message expiry and client-side redaction.
+- Add a notification layer using off-chain indexing.
+
+## License
+
+BSD-3-Clause-Clear. See `LICENSE`.
